@@ -18,12 +18,12 @@ app.use('/api/flight', FlightRoute)
 app.use('/api/airline', AirlineRoute)
 app.use('/api/user', UserRoute)
 
-app.get('*', (req, res) => {
+app.get("*", (req, res) => {
     res.status(404).json({
-        message: 'NOT_FOUND',
-        timestamp: new Date()
-    })
-})
+        message: "NOT_FOUND",
+        timestamp: new Date(),
+    });
+});
 
 configDotenv()
 AppDataSource.initialize()

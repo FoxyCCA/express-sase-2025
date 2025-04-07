@@ -5,6 +5,7 @@ import type { LoginModel } from "../models/login.model";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import type { Response } from "express";
+import type { RegisterModel } from "../models/register.model";
 
 const repo = AppDataSource.getRepository(User)
 const tokenSecret = process.env.JWT_SECRET
@@ -12,72 +13,112 @@ const accessTTL = process.env.JWT_ACCESS_TTL
 const refreshTTL = process.env.JWT_REFRESH_TTL
 
 export class UserService {
-
     static async login(model: LoginModel) {
-        const user = await this.getUserByEmail(model.email)
+        const user = await this.getUserByEmail(model.email);
 
         if (await bcrypt.compare(model.password, user!.password)) {
             const payload = {
                 id: user?.userId,
-                email: user?.email
-            }
+                email: user?.email,
+            };
 
             return {
                 name: user?.email,
                 //@ts-ignore
-                access: jwt.sign(payload, tokenSecret, { expiresIn: accessTTL }),
+                access: jwt.sign(payload, tokenSecret, {
+                    expiresIn: accessTTL,
+                }),
                 //@ts-ignore
-                refresh: jwt.sign(payload, tokenSecret, { expiresIn: refreshTTL })
-            }
+                refresh: jwt.sign(payload, tokenSecret, {
+                    expiresIn: refreshTTL,
+                }),
+            };
         }
 
-        throw new Error('BAD_CREDENTIALS')
+        throw new Error("BAD_CREDENTIALS");
     }
 
-static async verifyToken(req: any, res: Response, next: Function) {
-        const whitelist = ['/api/user/login']
+    static async verifyToken(req: any, res: Response, next: Function) {
+        const whitelist = ["/api/user/login", "/api/user/register"];
 
         if (whitelist.includes(req.path)) {
-            next()
-            return
+            next();
+            return;
         }
 
-        const authHeader = req.headers['authorization']
-        const token = authHeader && authHeader.split(' ')[1]
+        const authHeader = req.headers["authorization"];
+        const token = authHeader && authHeader.split(" ")[1];
 
         if (token == undefined) {
             res.status(401).json({
-                message: 'NO_TOKEN_FOUND',
-                timestamp: new Date()
-            })
-            return
+                message: "NO_TOKEN_FOUND",
+                timestamp: new Date(),
+            });
+            return;
         }
 
         //@ts-ignore
-        jwt.verify(token, tokenSecret, (err:any, user: any) =>{
+        jwt.verify(token, tokenSecret, (err: any, user: any) => {
             if (err) {
                 res.status(403).json({
-                    message: 'INVALID_TOKEN',
-                    timestamp: new Date()
-                })
-                return
+                    message: "INVALID_TOKEN",
+                    timestamp: new Date(),
+                });
+                return;
             }
 
-            req.user = user
-            next()
-        })
+            req.user = user;
+            next();
+        });
     }
+
+    static async refreshToken(token: string) {
+        const decoded: any = jwt.verify(token, tokenSecret!);
+        const user = await this.getUserByEmail(decoded.email);
+
+        const payload = {
+            id: user?.userId,
+            email: user?.email,
+        };
+
+        return {
+            name: user?.email,
+            //@ts-ignore
+            access: jwt.sign(payload, tokenSecret, { expiresIn: accessTTL }),
+            //@ts-ignore
+            refresh: token,
+        };
+    }
+
+    static async register(model: RegisterModel) {
+        const data = await repo.existsBy({
+            email: model.email,
+            deletedAt: IsNull(),
+        });
+
+        if (data) throw new Error("User_Exists");
+
+        const hashed = await bcrypt.hash(model.password, 12);
+
+        await repo.save({
+            email: model.email,
+            password: hashed,
+            name: model.name,
+        });
+    }
+
+    static async changePassword() {}
+
     static async getUserByEmail(email: string) {
         const data = repo.findOne({
             where: {
                 email: email,
-                deletedAt: IsNull()
-            }
-        })
+                deletedAt: IsNull(),
+            },
+        });
 
-        if (data == null)
-            throw new Error("USER_NOT_FOUND")
+        if (data == null) throw new Error("USER_NOT_FOUND");
 
-        return data
+        return data;
     }
 }
